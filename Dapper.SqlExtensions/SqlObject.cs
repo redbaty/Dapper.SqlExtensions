@@ -175,21 +175,20 @@ namespace Dapper.SqlExtensions
         {
             if (propertyInfo.PropertyType != typeof(string) && value == null &&
                 GetDefault(propertyInfo.PropertyType) == null)
-            {
                 return "'NULL'";
-            }
 
             var returnValue = value?.ToString();
 
-            switch (value)
+            if (value is DateTime dateTime)
             {
-                case DateTime dateTime:
-                    returnValue = dateTime.ToString("yyyy-MM-dd hh:mm:ss");
-                    break;
-                case double d:
-                    returnValue = d.ToString(CultureInfo.CurrentCulture).Replace(",", ".");
-                    break;
+                returnValue = dateTime.ToString("yyyy-MM-dd hh:mm:ss");
             }
+
+            if (value is double d)
+            {
+                returnValue = d.ToString(CultureInfo.CurrentCulture).Replace(",", ".");
+            }
+
 
             if (propertyInfo.GetCustomAttribute<StringLengthAttribute>() is StringLengthAttribute stringLengthAttribute)
             {
@@ -197,7 +196,7 @@ namespace Dapper.SqlExtensions
                     .AddQuotes();
             }
 
-            return returnValue.AddQuotes();
+            return returnValue.AddQuotes(value.GetType());
         }
     }
 }
