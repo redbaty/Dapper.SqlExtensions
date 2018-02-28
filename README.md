@@ -1,5 +1,5 @@
 # Dapper.SqlExtensions
-> Dapper.Contrib already does that! :confused: 
+:mega: **Dapper.Contrib already does that!** :confused: 
 
 You might say so, but Dapper.Contrib does not use the same annotations as Entity framework does, 
 that means that if you do a Scaffold with the -D parameter (Which makes it scaffold with data annotations) 
