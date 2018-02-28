@@ -54,13 +54,20 @@ namespace Dapper.SqlExtensions
         /// Adds the quotes.
         /// </summary>
         /// <param name="str">The string.</param>
+        /// <param name="objectType">The objects type (used in some specific cases)</param>
         /// <returns></returns>
-        public static string AddQuotes(this string str)
+        public static string AddQuotes(this string str, Type objectType = null)
         {
             if (str.StartsWith("'") && str.EndsWith("'"))
+            {
                 return str;
+            }
 
-            return str.IsNumeric() ? str : $"'{str}'";
+            str = str.Replace("'", "''");
+
+            return !(objectType != null && objectType == typeof(string))
+                ? (str.IsNumeric() ? str : $"'{str}'")
+                : $"'{str}'";
         }
 
         /// <summary>
