@@ -5,11 +5,18 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
+using LazyCache;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Internal;
+using Microsoft.EntityFrameworkCore.Metadata.Internal;
 
 namespace Dapper.SqlExtensions
 {
     public class SqlObject
     {
+        private static IAppCache Cache { get; } = new CachingService();
+
         /// <summary>
         /// Gets or sets the SQL table name.
         /// </summary>
@@ -32,25 +39,43 @@ namespace Dapper.SqlExtensions
         /// <value>
         /// The object's type.
         /// </value>
-        private Type Type { get; }
+        private Type Type { get; set; }
+
+        private IDbContextDependencies Context { get; }
+
+        public SqlObject(Type type, IDbContextDependencies context)
+        {
+            Context = context;
+            InitializeByType(type,
+                context.Model.FindEntityType(type).GetAnnotation("Relational:TableName").Value as string);
+        }
+
+        public SqlObject(object obj, IDbContextDependencies context)
+        {
+            Object = obj;
+            Context = context;
+            InitializeByType(obj.GetType(),
+                context.Model.FindEntityType(obj.GetType()).GetAnnotation("Relational:TableName").Value as string);
+        }
 
         /// <inheritdoc />
         public SqlObject(Type type, string tableName = null)
         {
-            Table = tableName ?? (type.GetCustomAttribute<TableAttribute>() is TableAttribute table
-                        ? table.Name
-                        : type.Name);
+            InitializeByType(type, tableName);
+        }
+
+        private void InitializeByType(Type type, string tableName)
+        {
             Type = type;
+            Table = tableName ?? Type.GetTable();
         }
 
         /// <inheritdoc />
         public SqlObject(object obj, string tableName = null)
         {
-            Table = tableName ?? (obj.GetType().GetCustomAttribute<TableAttribute>() is TableAttribute table
-                        ? table.Name
-                        : obj.GetType().Name);
             Object = obj;
             Type = Object.GetType();
+            Table = tableName ?? Type.GetTable();
         }
 
         /// <summary>
@@ -64,7 +89,7 @@ namespace Dapper.SqlExtensions
                 throw new Exception("Cant insert with null object");
 
             return
-                $"INSERT INTO {Table} ({GetColumns().Aggregate((c, n) => $"{c},{n}")}) VALUES ({GetValues().Aggregate((c, n) => $"{c},{n}")})";
+                $"INSERT INTO {Table} ({Cache.GetOrAdd($"SqlObject_AggregatedColumnsFor_{Type.FullName}", () => GetColumns().Aggregate((c, n) => $"{c},{n}"))}) VALUES ({GetValues().Aggregate((c, n) => $"{c},{n}")})";
         }
 
         /// <summary>
@@ -75,24 +100,27 @@ namespace Dapper.SqlExtensions
         /// <returns></returns>
         public string GetSelect(string where = null, bool ignoreIncludeInSelect = false)
         {
-            var props = Type.GetProperties();
-            var returnString = "";
-            foreach (var propertyInfo in props)
+            return Cache.GetOrAdd($"SqlObject_SelectFor_{Type.FullName}", () =>
             {
-                if (propertyInfo.GetCustomAttribute<IncludeInSelect>() != null)
+                var props = Type.GetProperties();
+                var returnString = "";
+                foreach (var propertyInfo in props)
                 {
-                    if (returnString != "")
-                        returnString += ",";
+                    if (propertyInfo.GetCustomAttribute<IncludeInSelect>() != null)
+                    {
+                        if (returnString != "")
+                            returnString += ",";
 
-                    returnString += GetColumnName(propertyInfo);
+                        returnString += GetColumnName(propertyInfo);
+                    }
                 }
-            }
 
-            var returnStrignEx = returnString == "" || ignoreIncludeInSelect ? "*" : returnString;
+                var returnStrignEx = returnString == "" || ignoreIncludeInSelect ? "*" : returnString;
 
-            return string.IsNullOrEmpty(where)
-                ? $"SELECT {returnStrignEx} FROM {Type.GetTable()}"
-                : $"SELECT {returnStrignEx} FROM {Type.GetTable()} WHERE {where}";
+                return string.IsNullOrEmpty(where)
+                    ? $"SELECT {returnStrignEx} FROM \"{Table}\""
+                    : $"SELECT {returnStrignEx} FROM \"{Table}\" WHERE {where}";
+            });
         }
 
         /// <summary>
@@ -101,7 +129,7 @@ namespace Dapper.SqlExtensions
         /// <returns></returns>
         public IEnumerable<string> GetColumns()
         {
-            return Type.GetProperties(BindingFlags.Public | BindingFlags.Instance).Select(GetColumnName)
+            return GetProperties().Select(GetColumnName)
                 .Where(i => !string.IsNullOrEmpty(i));
         }
 
@@ -111,8 +139,14 @@ namespace Dapper.SqlExtensions
         /// <returns></returns>
         public IEnumerable<string> GetValues()
         {
-            return Type.GetProperties(BindingFlags.Public | BindingFlags.Instance).Select(GetValue)
+            return GetProperties().Select(GetValue)
                 .Where(i => !string.IsNullOrEmpty(i));
+        }
+
+        private IEnumerable<PropertyInfo> GetProperties()
+        {
+            return Cache.GetOrAdd($"SqlObj_ProprtiesFor_{Type.FullName}",
+                () => Type.GetProperties(BindingFlags.Public | BindingFlags.Instance));
         }
 
         /// <summary>
@@ -120,14 +154,22 @@ namespace Dapper.SqlExtensions
         /// </summary>
         /// <param name="propertyInfo">The property information.</param>
         /// <returns></returns>
-        public static string GetColumnName(MemberInfo propertyInfo)
+        public string GetColumnName(MemberInfo propertyInfo)
         {
-            if (propertyInfo.GetCustomAttribute<InversePropertyAttribute>() is InversePropertyAttribute _)
-                return string.Empty;
+            return Cache.GetOrAdd($"SqlObj_Property[{Type.FullName}]={propertyInfo.Name}", () =>
+            {
+                if (Context != null && propertyInfo is PropertyInfo info)
+                {
+                    return Context.Model.FindEntityType(Type).AsEntityType().FindProperty(info).Name;
+                }
 
-            return propertyInfo.GetCustomAttribute<ColumnAttribute>() is ColumnAttribute attribute
-                ? attribute.Name
-                : propertyInfo.Name;
+                if (propertyInfo.GetCustomAttribute<InversePropertyAttribute>() is InversePropertyAttribute _)
+                    return string.Empty;
+
+                return propertyInfo.GetCustomAttribute<ColumnAttribute>() is ColumnAttribute attribute
+                    ? attribute.Name
+                    : propertyInfo.Name;
+            });
         }
 
         /// <summary>
@@ -162,7 +204,8 @@ namespace Dapper.SqlExtensions
         /// <returns></returns>
         public static object GetDefault(Type type)
         {
-            return type.IsValueType ? Activator.CreateInstance(type) : null;
+            return Cache.GetOrAdd($"SqlObject_DefaultFor_{type.FullName}",
+                () => type.IsValueType ? Activator.CreateInstance(type) : null);
         }
 
         /// <summary>
@@ -196,7 +239,7 @@ namespace Dapper.SqlExtensions
                     .AddQuotes();
             }
 
-            return returnValue.AddQuotes(value.GetType());
+            return returnValue.AddQuotes(value?.GetType());
         }
     }
 }
