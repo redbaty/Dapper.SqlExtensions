@@ -23,6 +23,12 @@ namespace Dapper.SqlExtensions
             }
         }
 
+        public static IEnumerable<T> Query<T>(this IDbConnection connection)
+        {
+            var @select = new SqlObject<T>().GetSelect();
+            return connection.Query<T>(@select);
+        }
+
         /// <summary>
         /// Gets the SQL select statement.
         /// </summary>
