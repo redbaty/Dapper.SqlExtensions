@@ -10,7 +10,7 @@ namespace Dapper.SqlExtensions
         public static IEnumerable<T> UseDapper<T>(this DbSet<T> dbSet) where T : class
         {
             var context = dbSet.GetContext();
-            var sqlObject = new SqlObject(Activator.CreateInstance<T>(), context);
+            var sqlObject = new SqlObject<T>(Activator.CreateInstance<T>(), context);
             return context.Database.GetDbConnection()
                 .Query<T>(sqlObject
                     .GetSelect());

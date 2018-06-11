@@ -1,6 +1,14 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Data;
+using System.Linq;
 using System.Reflection;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Internal;
+using Microsoft.EntityFrameworkCore.Query;
+using Microsoft.EntityFrameworkCore.Query.Internal;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace Dapper.SqlExtensions
 {
@@ -40,7 +48,12 @@ namespace Dapper.SqlExtensions
         public static string GetSqlSelect(this Type type, string tablename = null, string where = null,
             bool ignoreIncludeInSelect = false)
         {
-            return new SqlObject(type, tablename).GetSelect(where, ignoreIncludeInSelect);
+            return GetGenericObject(type, tablename).GetSelect(where, ignoreIncludeInSelect);
+        }
+
+        private static ISqlObject GetGenericObject(Type type, string tableName)
+        {
+            return (ISqlObject) Activator.CreateInstance(typeof(SqlObject<>).MakeGenericType(type), tableName);
         }
 
         /// <summary>
@@ -84,7 +97,7 @@ namespace Dapper.SqlExtensions
         /// <returns></returns>
         public static string GetInsertSql<T>(this T obj)
         {
-            var sqlObject = new SqlObject(obj);
+            var sqlObject = new SqlObject<T>(obj);
             return sqlObject.GetInsert();
         }
     }
