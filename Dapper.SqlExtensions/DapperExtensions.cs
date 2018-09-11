@@ -1,14 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations.Schema;
-using System.Data;
-using System.Linq;
 using System.Reflection;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Internal;
-using Microsoft.EntityFrameworkCore.Query;
-using Microsoft.EntityFrameworkCore.Query.Internal;
-using Microsoft.EntityFrameworkCore.Storage;
 
 namespace Dapper.SqlExtensions
 {
@@ -31,12 +23,6 @@ namespace Dapper.SqlExtensions
             }
         }
 
-        public static IEnumerable<T> Query<T>(this IDbConnection connection)
-        {
-            var @select = new SqlObject<T>().GetSelect();
-            return connection.Query<T>(@select);
-        }
-
         /// <summary>
         /// Gets the SQL select statement.
         /// </summary>
@@ -48,12 +34,7 @@ namespace Dapper.SqlExtensions
         public static string GetSqlSelect(this Type type, string tablename = null, string where = null,
             bool ignoreIncludeInSelect = false)
         {
-            return GetGenericObject(type, tablename).GetSelect(where, ignoreIncludeInSelect);
-        }
-
-        private static ISqlObject GetGenericObject(Type type, string tableName)
-        {
-            return (ISqlObject) Activator.CreateInstance(typeof(SqlObject<>).MakeGenericType(type), tableName);
+            return new SqlObject(type, tablename).GetSelect(where, ignoreIncludeInSelect);
         }
 
         /// <summary>
@@ -77,6 +58,7 @@ namespace Dapper.SqlExtensions
         /// <returns></returns>
         public static string AddQuotes(this string str, Type objectType = null)
         {
+
             if (str.StartsWith("'") && str.EndsWith("'"))
             {
                 return str;
@@ -97,7 +79,7 @@ namespace Dapper.SqlExtensions
         /// <returns></returns>
         public static string GetInsertSql<T>(this T obj)
         {
-            var sqlObject = new SqlObject<T>(obj);
+            var sqlObject = new SqlObject(obj);
             return sqlObject.GetInsert();
         }
     }
