@@ -17,7 +17,8 @@ namespace Dapper.SqlExtensions
         internal DapperObjectOptions GetFinal(Type objectType)
         {
             if (Properties == null || Properties.Count <= 0)
-                Properties = objectType.GetProperties(BindingFlags.Public | BindingFlags.Instance).ToList();
+                Properties = objectType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                    .Where(i => IsSimple(i.PropertyType)).ToList();
 
             if (string.IsNullOrEmpty(Table))
                 Table = objectType.GetCustomAttribute<TableAttribute>() is TableAttribute tableAttribute
@@ -25,6 +26,19 @@ namespace Dapper.SqlExtensions
                     : objectType.Name.ToUpper();
 
             return this;
+        }
+
+        private static bool IsSimple(Type type)
+        {
+            if (Nullable.GetUnderlyingType(type) is Type t)
+            {
+                type = t;
+            }
+
+            return type.IsPrimitive
+                   || type.IsEnum
+                   || type == typeof(string)
+                   || type == typeof(decimal);
         }
     }
 }
