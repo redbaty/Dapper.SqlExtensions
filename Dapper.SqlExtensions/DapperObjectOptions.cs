@@ -12,13 +12,21 @@ namespace Dapper.SqlExtensions
 
         public string Table { get; set; }
 
-        public Func<PropertyInfo, string> ColumnResolver { get; set; } = info => info.Name.ToUpper();
+        public Func<PropertyInfo, string> ColumnResolver { get; } = info =>
+        {
+            if (info.GetCustomAttribute<ColumnAttribute>() is ColumnAttribute columnAttribute)
+            {
+                return columnAttribute.Name;
+            }
+
+            return info.Name.ToUpper();
+        };
 
         internal DapperObjectOptions GetFinal(Type objectType)
         {
             if (Properties == null || Properties.Count <= 0)
                 Properties = objectType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                    .Where(i => IsSimple(i.PropertyType)).ToList();
+                    .Where(i => IsSupported(i.PropertyType)).ToList();
 
             if (string.IsNullOrEmpty(Table))
                 Table = objectType.GetCustomAttribute<TableAttribute>() is TableAttribute tableAttribute
@@ -28,16 +36,19 @@ namespace Dapper.SqlExtensions
             return this;
         }
 
-        private static bool IsSimple(Type type)
+        private static Type GetRealType(Type oldType)
         {
-            if (Nullable.GetUnderlyingType(type) is Type t)
-            {
-                type = t;
-            }
+            return Nullable.GetUnderlyingType(oldType) ?? oldType;
+        }
+
+        private static bool IsSupported(Type type)
+        {
+            type = GetRealType(type);
 
             return type.IsPrimitive
                    || type.IsEnum
                    || type == typeof(string)
+                   || type == typeof(DateTime)
                    || type == typeof(decimal);
         }
     }

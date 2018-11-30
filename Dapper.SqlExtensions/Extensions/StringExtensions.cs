@@ -13,6 +13,11 @@ namespace Dapper.SqlExtensions.Extensions
         /// <returns></returns>
         public static string AddQuotes(this string str, Type objectType = null)
         {
+            if (str == null)
+            {
+                return null;
+            }
+
             if (str.StartsWith("'") && str.EndsWith("'")) return str;
 
             str = str.Replace("'", "''");

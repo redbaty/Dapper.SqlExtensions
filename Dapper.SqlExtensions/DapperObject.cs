@@ -117,11 +117,16 @@ namespace Dapper.SqlExtensions
             return type.IsValueType ? Activator.CreateInstance(type) : null;
         }
 
-        private static string GetSafeSqlValue(PropertyInfo propertyInfo, object value)
+        private static Type GetRealType(Type propertyType)
         {
+            return Nullable.GetUnderlyingType(propertyType) ?? propertyType;
+        }
+
+        private static string GetSafeSqlValue(PropertyInfo propertyInfo, object value)
+        {     
             if (propertyInfo.PropertyType != typeof(string) && value == null &&
                 GetDefault(propertyInfo.PropertyType) == null)
-                return "'NULL'";
+                return "NULL";
 
             var returnValue = value?.ToString();
 
