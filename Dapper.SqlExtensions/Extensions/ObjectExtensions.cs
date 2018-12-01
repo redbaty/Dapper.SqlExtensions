@@ -3,6 +3,14 @@ using System.Linq.Expressions;
 
 namespace Dapper.SqlExtensions.Extensions
 {
+    internal static class TypeExtensions
+    {
+        internal static Type GetRealType(this Type propertyType)
+        {
+            return Nullable.GetUnderlyingType(propertyType) ?? propertyType;
+        }
+    }
+
     public static class ObjectExtensions
     {
         public static string GetInsertSql<T>(this T model, DapperObjectOptions options = null)

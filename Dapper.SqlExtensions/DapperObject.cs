@@ -5,26 +5,17 @@ using System.Globalization;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using Dapper.SqlExtensions.Exceptions;
 using Dapper.SqlExtensions.Extensions;
+using Dapper.SqlExtensions.Interfaces;
 
 namespace Dapper.SqlExtensions
 {
-    public class DapperObject<T>
+    public class DapperObject<T> : IDapperObject<T>
     {
         private DapperObjectOptions Options { get; }
 
-        public DapperObject(DapperObjectOptions options = null)
-        {
-            Options = options ?? new DapperObjectOptions();
-            Options = Options.GetFinal(typeof(T));
-        }
-
-        private void EnsureTable()
-        {
-            if (string.IsNullOrEmpty(Options.Table)) throw new InvalidOperationException("No table provided");
-        }
-
-        public string SelectWhere(Expression<Func<T, bool>> propertyLambda,
+        public string Select(Expression<Func<T, bool>> propertyLambda,
             bool ignoreAttributes = false)
         {
             EnsureTable();
@@ -38,21 +29,25 @@ namespace Dapper.SqlExtensions
 
         public string Insert(T instance)
         {
+            EnsureTable();
+
+            if (Options.Properties.Count <= 0) throw new NoPropertiesProvided();
+
             return
                 $"INSERT INTO {Options.Table} ({Options.Properties.Select(i => Options.ColumnResolver.Invoke(i)).Aggregate((x, y) => $"{x}, {y}")}) " +
                 $"VALUES ({Options.Properties.Select(i => GetSafeSqlValue(i, i.GetValue(instance))).Aggregate((x, y) => $"{x}, {y}")})";
         }
 
-
         public string Select(bool ignoreAttributes = false)
         {
             EnsureTable();
 
-            if (Options.Properties.All(i => i.GetCustomAttribute<UseInDapperSelect>() == null) || ignoreAttributes)
+            if (Options.Properties.All(i => i.GetCustomAttribute<UseOnSqlExtensionsSelect>() == null) ||
+                ignoreAttributes)
                 return $"SELECT * FROM {Options.Table}";
 
             return
-                $"SELECT {Options.Properties.Where(i => i.GetCustomAttribute<UseInDapperSelect>() != null).Select(i => Options.ColumnResolver.Invoke(i)).Aggregate((x, y) => $"{x}, {y}")} FROM {Options.Table}";
+                $"SELECT {Options.Properties.Where(i => i.GetCustomAttribute<UseOnSqlExtensionsSelect>() != null).Select(i => Options.ColumnResolver.Invoke(i)).Aggregate((x, y) => $"{x}, {y}")} FROM {Options.Table}";
         }
 
         public string Update<TProperty>(
@@ -70,7 +65,6 @@ namespace Dapper.SqlExtensions
             return Update(source, propertiesLambda.GetPropertiesFromExpression().ToList(), oldInstance);
         }
 
-
         public string Update(T instance, IList<PropertyInfo> keyProperty, T oldInstance = default(T))
         {
             EnsureTable();
@@ -82,6 +76,8 @@ namespace Dapper.SqlExtensions
                 .Select(i => new {newValue = i.GetValue(instance), oldValue = i.GetValue(oldInstance), property = i})
                 .Where(i => !Equals(i.newValue, i.oldValue)).Select(i => i.property).ToList();
 
+            if (getDifferentProperties.Count <= 0) throw new NoDifferenceFoundOnObjects();
+
             return GetUpdateSql(instance, keyProperty, getDifferentProperties);
         }
 
@@ -89,6 +85,17 @@ namespace Dapper.SqlExtensions
         {
             return
                 $"DELETE FROM {Options.Table} WHERE {GetWhereValuePair(instance, propertiesLambda.GetPropertiesFromExpression())}";
+        }
+
+        public DapperObject(DapperObjectOptions options = null)
+        {
+            Options = options ?? new DapperObjectOptions();
+            Options = Options.GetFinal(typeof(T));
+        }
+
+        private void EnsureTable()
+        {
+            if (string.IsNullOrEmpty(Options.Table)) throw new NoTableProvided();
         }
 
         private string GetUpdateSql(T instance, IEnumerable<PropertyInfo> keyProperty,
@@ -117,15 +124,10 @@ namespace Dapper.SqlExtensions
             return type.IsValueType ? Activator.CreateInstance(type) : null;
         }
 
-        private static Type GetRealType(Type propertyType)
-        {
-            return Nullable.GetUnderlyingType(propertyType) ?? propertyType;
-        }
-
         private static string GetSafeSqlValue(PropertyInfo propertyInfo, object value)
-        {     
-            if (propertyInfo.PropertyType != typeof(string) && value == null &&
-                GetDefault(propertyInfo.PropertyType) == null)
+        {
+            if (propertyInfo.PropertyType.GetRealType() != typeof(string) && value == null &&
+                GetDefault(propertyInfo.PropertyType.GetRealType()) == null)
                 return "NULL";
 
             var returnValue = value?.ToString();
@@ -139,7 +141,7 @@ namespace Dapper.SqlExtensions
                 returnValue = new string(value?.ToString().Take(stringLengthAttribute.MaximumLength).ToArray())
                     .AddQuotes();
 
-            if (propertyInfo.PropertyType.IsEnum && value != null) return ((int) value).ToString();
+            if (propertyInfo.PropertyType.GetRealType().IsEnum && value != null) return ((int) value).ToString();
 
             return returnValue.AddQuotes(value?.GetType());
         }

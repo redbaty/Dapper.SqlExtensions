@@ -11,12 +11,9 @@ namespace Dapper.SqlExtensions.Extensions
         /// <param name="str">The string.</param>
         /// <param name="objectType">The objects type (used in some specific cases)</param>
         /// <returns></returns>
-        public static string AddQuotes(this string str, Type objectType = null)
+        internal static string AddQuotes(this string str, Type objectType = null)
         {
-            if (str == null)
-            {
-                return null;
-            }
+            if (str == null) return null;
 
             if (str.StartsWith("'") && str.EndsWith("'")) return str;
 
@@ -34,7 +31,7 @@ namespace Dapper.SqlExtensions.Extensions
         /// <returns>
         ///     <c>true</c> if the specified expression is numeric; otherwise, <c>false</c>.
         /// </returns>
-        public static bool IsNumeric(this string expression)
+        private static bool IsNumeric(this string expression)
         {
             return double.TryParse(Convert.ToString(expression), NumberStyles.Any,
                 NumberFormatInfo.InvariantInfo, out _);

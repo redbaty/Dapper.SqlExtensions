@@ -31,7 +31,7 @@ namespace Dapper.SqlExtensions.Tests
             var instance = GetRandomPerson();
 
             Assert.AreEqual(
-                dapper.SelectWhere(p => p.Age == instance.Age && p.Name == instance.Name && p.Id == instance.Id),
+                dapper.Select(p => p.Age == instance.Age && p.Name == instance.Name && p.Id == instance.Id),
                 $"SELECT * FROM PESSOA WHERE NAME='{instance.Name}' AND AGE={instance.Age} AND ID={instance.Id}");
         }
 

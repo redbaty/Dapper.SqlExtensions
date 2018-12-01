@@ -8,19 +8,32 @@ namespace Dapper.SqlExtensions
 {
     public class DapperObjectOptions
     {
-        public List<PropertyInfo> Properties { get; set; }
-
-        public string Table { get; set; }
-
+        /// <summary>
+        ///     This function will be called for each property on every
+        ///     SQL call, to determine this property's SQL column name.
+        /// </summary>
         public Func<PropertyInfo, string> ColumnResolver { get; } = info =>
         {
             if (info.GetCustomAttribute<ColumnAttribute>() is ColumnAttribute columnAttribute)
-            {
                 return columnAttribute.Name;
-            }
 
             return info.Name.ToUpper();
         };
+
+        /// <summary>
+        ///     The relevant properties. (Will be used on every SQL call)
+        ///     If none are provided, all the public non-complex type
+        ///     properties will be used.
+        /// </summary>
+        public List<PropertyInfo> Properties { get; set; }
+
+        /// <summary>
+        ///     Gets/sets the SQL table name.
+        ///     If none is provided the class
+        ///     name or the name provided by <see cref="TableAttribute" />
+        ///     will be used.
+        /// </summary>
+        public string Table { get; set; }
 
         internal DapperObjectOptions GetFinal(Type objectType)
         {
